@@ -14,7 +14,7 @@ test-rust:
 	cd public/rust && cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings && cargo test
 
 check-shell:
-	sh -n sc.sh sc admin/recover.sh scripts/*.sh examples/*.sh
+	sh scripts/check-shell.sh
 
 test: test-ruby check-shell test-rust
 
