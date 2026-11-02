@@ -22,7 +22,7 @@ Rust tests include deterministic wrapping and payload-record vectors plus path-v
 ## Shell checks
 
 ```sh
-sh -n sc.sh sc admin/recover.sh scripts/*.sh examples/*.sh
+sh scripts/check-shell.sh
 ```
 
 ## Manual end-to-end test
