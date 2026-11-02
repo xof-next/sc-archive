@@ -86,7 +86,6 @@ pub fn save_recovery_token(token: &str, path: &Path) -> Result<()> {
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
