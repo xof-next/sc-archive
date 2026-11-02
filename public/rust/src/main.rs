@@ -560,7 +560,7 @@ fn decrypt_archive(
 
 fn validate_zip(zip_path: &Path) -> Result<()> {
     let mut archive = ZipArchive::new(File::open(zip_path)?)?;
-    if archive.len() == 0 || archive.len() > MAX_ENTRIES {
+    if archive.is_empty() || archive.len() > MAX_ENTRIES {
         bail!("ZIP entry count is outside the safety limits.");
     }
     let mut registry = HashMap::new();
@@ -602,7 +602,7 @@ fn extract_zip(zip_path: &Path, output_dir: &Path) -> Result<()> {
     let mut archive = ZipArchive::new(File::open(zip_path)?)?;
     let mut total_size = 0_u64;
     let mut registry = HashMap::new();
-    if archive.len() == 0 || archive.len() > MAX_ENTRIES {
+    if archive.is_empty() || archive.len() > MAX_ENTRIES {
         bail!("ZIP entry count is outside the safety limits.");
     }
     for index in 0..archive.len() {
@@ -828,7 +828,6 @@ fn main() {
         }
     }
 }
-
 
 #[cfg(test)]
 mod format_tests {
