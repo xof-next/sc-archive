@@ -1,0 +1,24 @@
+[package]
+name = "sc-archive"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.88"
+
+[[bin]]
+name = "sc"
+path = "src/main.rs"
+
+[dependencies]
+aes-gcm = "0.11.1"
+anyhow = "1.0"
+base64 = "0.22"
+clap = { version = "4.6", features = ["derive"] }
+getrandom = "0.3"
+rpassword = "7.4"
+scrypt = { version = "0.12", default-features = false }
+tempfile = "3.23"
+walkdir = "2.5"
+zip = { version = "8.6", default-features = false, features = ["deflate"] }
+zeroize = "1.8"
+unicode-normalization = "0.1"
+libc = "0.2"

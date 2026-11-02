@@ -1,0 +1,17 @@
+{
+  "format": "SCAR v2",
+  "test_only_scrypt_log2_n": 14,
+  "password": "Cross-language passphrase 2026",
+  "recovery_token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "password_salt_hex": "50505050505050505050505050505050",
+  "recovery_salt_hex": "52525252525252525252525252525252",
+  "nonce_prefix_hex": "4e4e4e4e4e4e4e4e",
+  "password_nonce_hex": "707070707070707070707070",
+  "recovery_nonce_hex": "727272727272727272727272",
+  "data_key_hex": "4444444444444444444444444444444444444444444444444444444444444444",
+  "payload": "Cross-language encrypted record fixture.",
+  "counter": 7,
+  "password_wrapped_key_hex": "d38950ae3318bdd71bb554d2cba4d9dc84a9c4725dbf20ebd34d9608239fb2618e17115dc412847c2fb842a838bb517f",
+  "recovery_wrapped_key_hex": "de4645061092c8b19abcd45957b13a07c012342aa5725ce6d5977ebd21dbfac94a1d3f7399ae7b4b472e7a908e4a5d56",
+  "encrypted_payload_record_hex": "51f23b3c7f809b82e26eb3732cca95a2778894743fcd9dc80ae12e830f35eef98b8271e6b6d12ea184ad9458122c0897b40d40635b0f79d7"
+}

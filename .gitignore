@@ -1,0 +1,21 @@
+# Runtime outputs
+*.sc
+*.sc.recovery
+*.recovery
+*.tmp
+*.zip
+
+# Ruby
+.bundle/
+/vendor/
+coverage/
+*.gem
+
+# Rust
+**/target/
+
+# Local audit and test outputs
+.sc-archive/
+*.log
+.DS_Store
+Thumbs.db
