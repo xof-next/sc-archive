@@ -57,7 +57,11 @@ pub fn audit(action: &str, result: &str, version: &str) {
         options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
     }
     if let Ok(mut file) = options.open(&path) {
-        if !file.metadata().map(|metadata| metadata.is_file()).unwrap_or(false) {
+        if !file
+            .metadata()
+            .map(|metadata| metadata.is_file())
+            .unwrap_or(false)
+        {
             eprintln!("Warning: local audit log is not a regular file; audit skipped.");
             return;
         }
