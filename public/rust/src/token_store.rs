@@ -1,5 +1,5 @@
-use anyhow::{bail, Context, Result};
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use anyhow::{Context, Result, bail};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::Path;
@@ -11,7 +11,10 @@ pub fn validate_token(token: &str) -> Result<()> {
             .decode(token)
             .context("Invalid recovery token encoding")?,
     );
-    if token.len() != 43 || decoded.len() != 32 || URL_SAFE_NO_PAD.encode(decoded.as_slice()) != token {
+    if token.len() != 43
+        || decoded.len() != 32
+        || URL_SAFE_NO_PAD.encode(decoded.as_slice()) != token
+    {
         bail!("Invalid recovery token format.");
     }
     Ok(())
@@ -32,7 +35,9 @@ pub fn read_token_file(path: &Path) -> Result<Zeroizing<String>> {
         use std::os::unix::fs::OpenOptionsExt;
         open_options.custom_flags(libc::O_NOFOLLOW);
     }
-    let file = open_options.open(path).context("Could not safely open recovery-token file")?;
+    let file = open_options
+        .open(path)
+        .context("Could not safely open recovery-token file")?;
     let opened_metadata = file.metadata()?;
     if !opened_metadata.is_file() {
         bail!("Recovery-token path must be a regular file.");
@@ -51,9 +56,8 @@ pub fn read_token_file(path: &Path) -> Result<Zeroizing<String>> {
         raw.zeroize();
         bail!("Recovery-token file is too large.");
     }
-    let mut contents = Zeroizing::new(
-        String::from_utf8(raw).context("Recovery-token file is not valid UTF-8")?,
-    );
+    let mut contents =
+        Zeroizing::new(String::from_utf8(raw).context("Recovery-token file is not valid UTF-8")?);
     let token = Zeroizing::new(contents.trim().to_owned());
     contents.zeroize();
     validate_token(token.as_str())?;
@@ -76,9 +80,12 @@ pub fn save_recovery_token(token: &str, path: &Path) -> Result<()> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    let mut file = options
-        .open(path)
-        .with_context(|| format!("Recovery file already exists or cannot be created: {}", path.display()))?;
+    let mut file = options.open(path).with_context(|| {
+        format!(
+            "Recovery file already exists or cannot be created: {}",
+            path.display()
+        )
+    })?;
     file.write_all(token.as_bytes())?;
     file.write_all(b"\n")?;
     file.flush()?;
