@@ -1,11 +1,11 @@
 use aes_gcm::{
-    aead::{Aead, KeyInit, Payload},
     Aes256Gcm, Nonce,
+    aead::{Aead, KeyInit, Payload},
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 use rpassword::prompt_password as read_password;
-use scrypt::{scrypt, Params};
+use scrypt::{Params, scrypt};
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -18,12 +18,10 @@ mod token_store;
 
 use audit::audit;
 use secure_paths::{
-    ensure_outside_source, register_zip_path, reject_symlink_components,
-    safe_zip_relative_path, validate_archive_path,
+    ensure_outside_source, register_zip_path, reject_symlink_components, safe_zip_relative_path,
+    validate_archive_path,
 };
-use token_store::{
-    generate_recovery_token, read_token_file, save_recovery_token, validate_token,
-};
+use token_store::{generate_recovery_token, read_token_file, save_recovery_token, validate_token};
 use zeroize::{Zeroize, Zeroizing};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -45,7 +43,7 @@ const PREFIX_LEN: usize = 58;
 const WRAPPED_KEY_LEN: usize = KEY_LEN + TAG_LEN;
 const HEADER_LEN: usize = PREFIX_LEN + NONCE_LEN + WRAPPED_KEY_LEN + NONCE_LEN + WRAPPED_KEY_LEN;
 const MAX_ENTRIES: usize = 50_000;
-const MAX_ENTRY_SIZE: u64 = 1 * 1024 * 1024 * 1024;
+const MAX_ENTRY_SIZE: u64 = 1024 * 1024 * 1024;
 const MAX_EXTRACT_SIZE: u64 = 4 * 1024 * 1024 * 1024;
 const PASSWORD_AAD: &[u8] = b"SCAR-V2-PASSWORD-WRAP";
 const RECOVERY_AAD: &[u8] = b"SCAR-V2-RECOVERY-WRAP";
@@ -95,9 +93,7 @@ enum Commands {
         token_file: Option<PathBuf>,
     },
     /// Display safe archive metadata without unlocking the archive.
-    Inspect {
-        archive: PathBuf,
-    },
+    Inspect { archive: PathBuf },
     /// Authenticate all records and validate the encrypted ZIP payload.
     Verify {
         archive: PathBuf,
@@ -119,7 +115,12 @@ fn prompt_password(confirm: bool, new_archive: bool) -> Result<Zeroizing<String>
         if password.chars().any(char::is_control) {
             bail!("Password must not contain control characters.");
         }
-        if password.chars().collect::<std::collections::HashSet<_>>().len() == 1 {
+        if password
+            .chars()
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            == 1
+        {
             bail!("Password must not consist of one repeated character.");
         }
     }
@@ -135,8 +136,8 @@ fn prompt_password(confirm: bool, new_archive: bool) -> Result<Zeroizing<String>
 }
 
 fn derive_key(secret: &str, salt: &[u8], log_n: u8) -> Result<Zeroizing<[u8; KEY_LEN]>> {
-    let params = Params::new(log_n, SCRYPT_R, SCRYPT_P)
-        .map_err(|_| anyhow!("Invalid scrypt parameters"))?;
+    let params =
+        Params::new(log_n, SCRYPT_R, SCRYPT_P).map_err(|_| anyhow!("Invalid scrypt parameters"))?;
     let mut key = Zeroizing::new([0_u8; KEY_LEN]);
     scrypt(secret.as_bytes(), salt, &params, &mut key[..])
         .map_err(|_| anyhow!("Could not derive encryption key"))?;
@@ -236,7 +237,9 @@ fn unwrap_data_key(
                     aad: &aad,
                 },
             )
-            .map_err(|_| anyhow!("Authentication failed: incorrect credential or damaged archive"))?,
+            .map_err(|_| {
+                anyhow!("Authentication failed: incorrect credential or damaged archive")
+            })?,
     );
     if plaintext.len() != KEY_LEN {
         bail!("Invalid wrapped data key.");
@@ -265,12 +268,13 @@ fn create_zip(input_path: &Path, zip_path: &Path) -> Result<()> {
 
     let mut registry = HashMap::new();
     if metadata.is_file() {
-        item_count += 1;
         total_size = metadata.len();
         if total_size > MAX_ENTRY_SIZE || total_size > MAX_EXTRACT_SIZE {
             bail!("Input file exceeds the archive safety limit.");
         }
-        let name = input.file_name().and_then(|value| value.to_str())
+        let name = input
+            .file_name()
+            .and_then(|value| value.to_str())
             .ok_or_else(|| anyhow!("Input filename must be valid UTF-8"))?
             .replace('\\', "/");
         let safe_name = safe_zip_relative_path(&name, false)?;
@@ -280,7 +284,9 @@ fn create_zip(input_path: &Path, zip_path: &Path) -> Result<()> {
         std::io::copy(&mut source, &mut zip)?;
     } else {
         let parent = input.parent().unwrap_or(Path::new("."));
-        let root_name = input.file_name().and_then(|value| value.to_str())
+        let root_name = input
+            .file_name()
+            .and_then(|value| value.to_str())
             .ok_or_else(|| anyhow!("Input directory name must be valid UTF-8"))?
             .replace('\\', "/");
         let safe_root = safe_zip_relative_path(&format!("{root_name}/"), true)?;
@@ -301,19 +307,29 @@ fn create_zip(input_path: &Path, zip_path: &Path) -> Result<()> {
             if item_count > MAX_ENTRIES {
                 bail!("Input contains too many filesystem entries.");
             }
-            let relative = path.strip_prefix(parent)?
-                .to_str().ok_or_else(|| anyhow!("Input path contains non-UTF-8 characters"))?
+            let relative = path
+                .strip_prefix(parent)?
+                .to_str()
+                .ok_or_else(|| anyhow!("Input path contains non-UTF-8 characters"))?
                 .replace('\\', "/");
             if entry.file_type().is_dir() {
-                let safe_relative = safe_zip_relative_path(&format!("{}/", relative.trim_end_matches('/')), true)?;
+                let safe_relative =
+                    safe_zip_relative_path(&format!("{}/", relative.trim_end_matches('/')), true)?;
                 register_zip_path(&mut registry, &safe_relative, true)?;
-                zip.add_directory(format!("{}/", relative.trim_end_matches('/')), options.clone())?;
+                zip.add_directory(
+                    format!("{}/", relative.trim_end_matches('/')),
+                    options.clone(),
+                )?;
             } else if entry.file_type().is_file() {
                 let file_size = entry.metadata()?.len();
                 if file_size > MAX_ENTRY_SIZE {
-                    bail!("Input file exceeds the per-file safety limit: {}", path.display());
+                    bail!(
+                        "Input file exceeds the per-file safety limit: {}",
+                        path.display()
+                    );
                 }
-                total_size = total_size.checked_add(file_size)
+                total_size = total_size
+                    .checked_add(file_size)
                     .ok_or_else(|| anyhow!("Input size overflow"))?;
                 if total_size > MAX_EXTRACT_SIZE {
                     bail!("Input exceeds the total archive safety limit.");
@@ -372,7 +388,7 @@ fn encrypt_zip(
         &password_nonce,
         &prefix,
         PASSWORD_AAD,
-        &*data_key,
+        &data_key,
         log_n,
     )?;
     let recovery_wrap = wrap_data_key(
@@ -381,7 +397,7 @@ fn encrypt_zip(
         &recovery_nonce,
         &prefix,
         RECOVERY_AAD,
-        &*data_key,
+        &data_key,
         log_n,
     )?;
     if password_wrap.len() != WRAPPED_KEY_LEN || recovery_wrap.len() != WRAPPED_KEY_LEN {
@@ -398,9 +414,14 @@ fn encrypt_zip(
         bail!("Internal header length mismatch.");
     }
 
-    let cipher = Aes256Gcm::new_from_slice(&data_key[..]).map_err(|_| anyhow!("Invalid AES key"))?;
-    let mut output = create_private_new(output_path)
-        .with_context(|| format!("Output already exists or cannot be created: {}", output_path.display()))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(&data_key[..]).map_err(|_| anyhow!("Invalid AES key"))?;
+    let mut output = create_private_new(output_path).with_context(|| {
+        format!(
+            "Output already exists or cannot be created: {}",
+            output_path.display()
+        )
+    })?;
 
     let result = (|| -> Result<()> {
         output.write_all(&header)?;
@@ -424,7 +445,10 @@ fn encrypt_zip(
             let encrypted = cipher
                 .encrypt(
                     Nonce::from_slice(&nonce_bytes),
-                    Payload { msg: &buffer[..read], aad: &aad },
+                    Payload {
+                        msg: &buffer[..read],
+                        aad: &aad,
+                    },
                 )
                 .map_err(|_| anyhow!("Could not encrypt archive block"))?;
             output.write_all(&length.to_be_bytes())?;
@@ -439,7 +463,10 @@ fn encrypt_zip(
         let terminal = cipher
             .encrypt(
                 Nonce::from_slice(&terminal_nonce),
-                Payload { msg: &[], aad: &terminal_aad },
+                Payload {
+                    msg: &[],
+                    aad: &terminal_aad,
+                },
             )
             .map_err(|_| anyhow!("Could not authenticate archive terminator"))?;
         output.write_all(&0_u32.to_be_bytes())?;
@@ -458,7 +485,9 @@ fn encrypt_zip(
 
 fn read_exact<const N: usize>(input: &mut File) -> Result<[u8; N]> {
     let mut bytes = [0_u8; N];
-    input.read_exact(&mut bytes).context("Damaged or incomplete archive")?;
+    input
+        .read_exact(&mut bytes)
+        .context("Damaged or incomplete archive")?;
     Ok(bytes)
 }
 
@@ -490,10 +519,13 @@ fn decrypt_archive(
 
     let mut header = [0_u8; HEADER_LEN];
     header[..PREFIX_LEN].copy_from_slice(&prefix);
-    input.read_exact(&mut header[PREFIX_LEN..]).context("Damaged or incomplete archive header")?;
+    input
+        .read_exact(&mut header[PREFIX_LEN..])
+        .context("Damaged or incomplete archive header")?;
     let nonce_prefix: [u8; NONCE_PREFIX_LEN] = header[46..54].try_into()?;
     let data_key = unwrap_data_key(&header, credential, recovery_mode, log_n)?;
-    let cipher = Aes256Gcm::new_from_slice(&data_key[..]).map_err(|_| anyhow!("Invalid AES key"))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(&data_key[..]).map_err(|_| anyhow!("Invalid AES key"))?;
     let mut output = create_private_new(zip_path)?;
     let mut counter: u32 = 0;
     let mut total: u64 = 0;
@@ -511,7 +543,10 @@ fn decrypt_archive(
             cipher
                 .decrypt(
                     Nonce::from_slice(&terminal_nonce),
-                    Payload { msg: &terminal, aad: &terminal_aad },
+                    Payload {
+                        msg: &terminal,
+                        aad: &terminal_aad,
+                    },
                 )
                 .map_err(|_| anyhow!("Authentication failed: damaged archive"))?;
             break;
@@ -523,7 +558,9 @@ fn decrypt_archive(
             bail!("Archive contains too many blocks.");
         }
         let mut encrypted = vec![0_u8; length + TAG_LEN];
-        input.read_exact(&mut encrypted).context("Damaged or incomplete archive block")?;
+        input
+            .read_exact(&mut encrypted)
+            .context("Damaged or incomplete archive block")?;
         let mut aad = Vec::with_capacity(HEADER_LEN + 8);
         aad.extend_from_slice(&header);
         aad.extend_from_slice(&counter.to_be_bytes());
@@ -532,13 +569,18 @@ fn decrypt_archive(
         let plain = cipher
             .decrypt(
                 Nonce::from_slice(&nonce_bytes),
-                Payload { msg: &encrypted, aad: &aad },
+                Payload {
+                    msg: &encrypted,
+                    aad: &aad,
+                },
             )
             .map_err(|_| anyhow!("Authentication failed: damaged archive"))?;
         if plain.len() != length {
             bail!("Invalid decrypted block length.");
         }
-        total = total.checked_add(plain.len() as u64).ok_or_else(|| anyhow!("Decrypted payload size overflow"))?;
+        total = total
+            .checked_add(plain.len() as u64)
+            .ok_or_else(|| anyhow!("Decrypted payload size overflow"))?;
         if total > MAX_EXTRACT_SIZE {
             bail!("Decrypted payload exceeds the safety limit.");
         }
@@ -566,7 +608,7 @@ fn validate_zip(zip_path: &Path) -> Result<()> {
     let mut registry = HashMap::new();
     let mut total = 0_u64;
     for index in 0..archive.len() {
-        let mut entry = archive.by_index(index)?;
+        let entry = archive.by_index(index)?;
         if entry.is_symlink() {
             bail!("Symbolic-link entries are not supported.");
         }
@@ -583,7 +625,9 @@ fn validate_zip(zip_path: &Path) -> Result<()> {
         if declared > MAX_ENTRY_SIZE {
             bail!("ZIP entry exceeds the per-file safety limit.");
         }
-        total = total.checked_add(declared).ok_or_else(|| anyhow!("ZIP expanded size overflow"))?;
+        total = total
+            .checked_add(declared)
+            .ok_or_else(|| anyhow!("ZIP expanded size overflow"))?;
         if total > MAX_EXTRACT_SIZE {
             bail!("ZIP expanded size exceeds the safety limit.");
         }
@@ -606,7 +650,7 @@ fn extract_zip(zip_path: &Path, output_dir: &Path) -> Result<()> {
         bail!("ZIP entry count is outside the safety limits.");
     }
     for index in 0..archive.len() {
-        let mut entry = archive.by_index(index)?;
+        let entry = archive.by_index(index)?;
         if entry.is_symlink() {
             bail!("Symbolic-link entries are not restored.");
         }
@@ -626,7 +670,9 @@ fn extract_zip(zip_path: &Path, output_dir: &Path) -> Result<()> {
         if entry_size > MAX_ENTRY_SIZE {
             bail!("ZIP entry exceeds the safety limit.");
         }
-        total_size = total_size.checked_add(entry_size).ok_or_else(|| anyhow!("ZIP expanded size overflow"))?;
+        total_size = total_size
+            .checked_add(entry_size)
+            .ok_or_else(|| anyhow!("ZIP expanded size overflow"))?;
         if total_size > MAX_EXTRACT_SIZE {
             bail!("ZIP expanded size exceeds the safety limit.");
         }
@@ -657,28 +703,45 @@ fn absolute_path(path: PathBuf) -> Result<PathBuf> {
 
 fn default_pack_output(input: &Path) -> Result<PathBuf> {
     let canonical = fs::canonicalize(input)?;
-    let name = canonical.file_name().ok_or_else(|| anyhow!("Input name is missing"))?.to_string_lossy();
-    let parent = canonical.parent().ok_or_else(|| anyhow!("Input parent directory is missing"))?;
+    let name = canonical
+        .file_name()
+        .ok_or_else(|| anyhow!("Input name is missing"))?
+        .to_string_lossy();
+    let parent = canonical
+        .parent()
+        .ok_or_else(|| anyhow!("Input parent directory is missing"))?;
     Ok(parent.join(format!("{name}.sc")))
 }
 
 fn default_unpack_output(archive: &Path) -> PathBuf {
     let stem = archive.file_stem().unwrap_or_default().to_string_lossy();
-    archive.parent().unwrap_or(Path::new(".")).join(format!("{stem}_restored"))
+    archive
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join(format!("{stem}_restored"))
 }
 
-fn restore_archive(archive: &Path, output: PathBuf, credential: &str, recovery_mode: bool) -> Result<()> {
+fn restore_archive(
+    archive: &Path,
+    output: PathBuf,
+    credential: &str,
+    recovery_mode: bool,
+) -> Result<()> {
     validate_archive_path(archive)?;
     if output.exists() || fs::symlink_metadata(&output).is_ok() {
         bail!("Destination already exists; choose a new output directory.");
     }
     let output = absolute_path(output)?;
-    let parent = output.parent().ok_or_else(|| anyhow!("Output directory has no parent"))?;
+    let parent = output
+        .parent()
+        .ok_or_else(|| anyhow!("Output directory has no parent"))?;
     fs::create_dir_all(parent)?;
     let work = tempdir()?;
     let zip_path = work.path().join("payload.zip");
     decrypt_archive(archive, &zip_path, credential, recovery_mode)?;
-    let staging = tempfile::Builder::new().prefix(".sc-extract-").tempdir_in(parent)?;
+    let staging = tempfile::Builder::new()
+        .prefix(".sc-extract-")
+        .tempdir_in(parent)?;
     extract_zip(&zip_path, staging.path())?;
     if output.exists() {
         bail!("Destination appeared while extracting.");
@@ -703,11 +766,22 @@ fn inspect_archive(archive: &Path) -> Result<()> {
     let r = u32::from_be_bytes(prefix[6..10].try_into()?);
     let p = u32::from_be_bytes(prefix[10..14].try_into()?);
     let chunk = u32::from_be_bytes(prefix[54..58].try_into()?);
-    if (log_n != STANDARD_LOG_N && log_n != HIGH_LOG_N) || r != SCRYPT_R || p != SCRYPT_P || chunk as usize != CHUNK_SIZE {
+    if (log_n != STANDARD_LOG_N && log_n != HIGH_LOG_N)
+        || r != SCRYPT_R
+        || p != SCRYPT_P
+        || chunk as usize != CHUNK_SIZE
+    {
         bail!("Unsupported or invalid archive parameters.");
     }
     println!("Format: SCAR v{}", prefix[4]);
-    println!("Profile: {}", if log_n == HIGH_LOG_N { "high" } else { "standard" });
+    println!(
+        "Profile: {}",
+        if log_n == HIGH_LOG_N {
+            "high"
+        } else {
+            "standard"
+        }
+    );
     println!("KDF: scrypt (N=2^{log_n}, r={r}, p={p})");
     println!("Payload: AES-256-GCM, 1 MiB authenticated records");
     println!("Archive size: {} bytes", fs::metadata(archive)?.len());
@@ -720,13 +794,20 @@ fn verify_archive(archive: &Path, credential: &str, recovery_mode: bool) -> Resu
     let zip_path = work.path().join("payload.zip");
     decrypt_archive(archive, &zip_path, credential, recovery_mode)?;
     validate_zip(&zip_path)?;
-    println!("Verification: passed (credential, authenticated records, terminal tag, ZIP structure)");
+    println!(
+        "Verification: passed (credential, authenticated records, terminal tag, ZIP structure)"
+    );
     Ok(())
 }
 
 fn run(cli: Cli) -> Result<&'static str> {
     match cli.command {
-        Commands::Pack { input, output, obfuscation, recovery_file } => {
+        Commands::Pack {
+            input,
+            output,
+            obfuscation,
+            recovery_file,
+        } => {
             let source_meta = fs::symlink_metadata(&input).context("Input path does not exist")?;
             if source_meta.file_type().is_symlink() {
                 bail!("Symbolic links are not accepted as the input.");
@@ -736,7 +817,11 @@ fn run(cli: Cli) -> Result<&'static str> {
                 Some(path) => absolute_path(path)?,
                 None => default_pack_output(&input)?,
             };
-            if !output.to_string_lossy().to_ascii_lowercase().ends_with(".sc") {
+            if !output
+                .to_string_lossy()
+                .to_ascii_lowercase()
+                .ends_with(".sc")
+            {
                 bail!("Output filename must end with .sc.");
             }
             if output.exists() || fs::symlink_metadata(&output).is_ok() {
@@ -761,16 +846,31 @@ fn run(cli: Cli) -> Result<&'static str> {
             let work = tempdir()?;
             let zip_path = work.path().join("payload.zip");
             create_zip(&input, &zip_path)?;
-            encrypt_zip(&zip_path, &output, password.as_str(), recovery_token.as_str(), log_n)?;
+            encrypt_zip(
+                &zip_path,
+                &output,
+                password.as_str(),
+                recovery_token.as_str(),
+                log_n,
+            )?;
             if let Some(path) = recovery_file {
                 let path = absolute_path(path)?;
                 match save_recovery_token(recovery_token.as_str(), &path) {
                     Ok(()) => println!("Recovery token saved: {}", path.display()),
-                    Err(error) => eprintln!("Warning: could not save recovery token file: {error:#}"),
+                    Err(error) => {
+                        eprintln!("Warning: could not save recovery token file: {error:#}")
+                    }
                 }
             }
             println!("Created: {}", output.display());
-            println!("Obfuscation: {}", if log_n == HIGH_LOG_N { "high" } else { "standard" });
+            println!(
+                "Obfuscation: {}",
+                if log_n == HIGH_LOG_N {
+                    "high"
+                } else {
+                    "standard"
+                }
+            );
             println!("RECOVERY TOKEN (store securely; displayed only once):");
             println!("{}", recovery_token.as_str());
             Ok("pack")
@@ -782,12 +882,17 @@ fn run(cli: Cli) -> Result<&'static str> {
             restore_archive(&archive, output, password.as_str(), false)?;
             Ok("unpack")
         }
-        Commands::Recover { archive, output, token_file } => {
+        Commands::Recover {
+            archive,
+            output,
+            token_file,
+        } => {
             let archive = absolute_path(archive)?;
             let output = output.unwrap_or_else(|| default_unpack_output(&archive));
             let token = Zeroizing::new(match token_file {
                 Some(path) => read_token_file(&path)?.as_str().to_owned(),
-                None => read_password("Admin recovery token: ").context("Could not read recovery token")?,
+                None => read_password("Admin recovery token: ")
+                    .context("Could not read recovery token")?,
             });
             validate_token(token.as_str())?;
             restore_archive(&archive, output, token.as_str(), true)?;
@@ -798,7 +903,10 @@ fn run(cli: Cli) -> Result<&'static str> {
             inspect_archive(&archive)?;
             Ok("inspect")
         }
-        Commands::Verify { archive, token_file } => {
+        Commands::Verify {
+            archive,
+            token_file,
+        } => {
             let archive = absolute_path(archive)?;
             let (credential, recovery_mode) = match token_file {
                 Some(path) => (read_token_file(&path)?, true),
@@ -851,14 +959,20 @@ mod format_tests {
             "trailing.",
             "trailing ",
         ] {
-            assert!(safe_zip_relative_path(value, false).is_err(), "accepted unsafe path: {value}");
+            assert!(
+                safe_zip_relative_path(value, false).is_err(),
+                "accepted unsafe path: {value}"
+            );
         }
     }
 
     #[test]
     fn accepts_safe_nested_zip_paths() -> Result<()> {
         let value = safe_zip_relative_path("folder/nested/file.txt", false)?;
-        assert_eq!(value, PathBuf::from("folder").join("nested").join("file.txt"));
+        assert_eq!(
+            value,
+            PathBuf::from("folder").join("nested").join("file.txt")
+        );
         Ok(())
     }
 
@@ -936,10 +1050,16 @@ mod format_tests {
         aad.extend_from_slice(&counter.to_be_bytes());
         aad.extend_from_slice(&(plaintext.len() as u32).to_be_bytes());
         let nonce = make_nonce(&nonce_prefix, counter);
-        let payload_cipher = Aes256Gcm::new_from_slice(&data_key)
-            .map_err(|_| anyhow!("Invalid test AES key"))?;
+        let payload_cipher =
+            Aes256Gcm::new_from_slice(&data_key).map_err(|_| anyhow!("Invalid test AES key"))?;
         let payload_record = payload_cipher
-            .encrypt(Nonce::from_slice(&nonce), Payload { msg: plaintext, aad: &aad })
+            .encrypt(
+                Nonce::from_slice(&nonce),
+                Payload {
+                    msg: plaintext,
+                    aad: &aad,
+                },
+            )
             .map_err(|_| anyhow!("Test payload encryption failed"))?;
         assert_eq!(
             to_hex(&payload_record),
