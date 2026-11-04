@@ -1,11 +1,12 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use unicode_normalization::UnicodeNormalization;
 
 pub fn validate_archive_path(path: &Path) -> Result<()> {
-    let metadata = fs::symlink_metadata(path).map_err(|_| anyhow::anyhow!("Archive file does not exist"))?;
+    let metadata =
+        fs::symlink_metadata(path).map_err(|_| anyhow::anyhow!("Archive file does not exist"))?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         bail!("Archive path must be a regular file, not a symbolic link.");
     }
@@ -99,8 +100,14 @@ pub fn safe_zip_relative_path(name: &str, is_directory: bool) -> Result<PathBuf>
             && (upper.starts_with("COM") || upper.starts_with("LPT"))
             && upper.as_bytes()[3].is_ascii_digit()
             && upper.as_bytes()[3] != b'0';
-        if upper == "CON" || upper == "PRN" || upper == "AUX" || upper == "NUL"
-            || upper == "CONIN$" || upper == "CONOUT$" || numbered_device {
+        if upper == "CON"
+            || upper == "PRN"
+            || upper == "AUX"
+            || upper == "NUL"
+            || upper == "CONIN$"
+            || upper == "CONOUT$"
+            || numbered_device
+        {
             bail!("Unsafe path found in ZIP archive.");
         }
     }
@@ -192,14 +199,20 @@ mod tests {
             "trailing ",
             "folder//",
         ] {
-            assert!(safe_zip_relative_path(name, name.ends_with('/')).is_err(), "accepted {name}");
+            assert!(
+                safe_zip_relative_path(name, name.ends_with('/')).is_err(),
+                "accepted {name}"
+            );
         }
     }
 
     #[test]
     fn accepts_nested_relative_paths() -> Result<()> {
         let path = safe_zip_relative_path("folder/nested/file.txt", false)?;
-        assert_eq!(path, PathBuf::from("folder").join("nested").join("file.txt"));
+        assert_eq!(
+            path,
+            PathBuf::from("folder").join("nested").join("file.txt")
+        );
         Ok(())
     }
 
